@@ -201,12 +201,11 @@ with st.expander("ℹ️ How to interpret these results"):
     An SRM occurs when the observed number of users in each variant is statistically different from the expected number. For example, in a 50/50 A/B test, you get 45% of users in A and 55% in B. This can indicate a bug in your randomization or tracking, which can invalidate your entire experiment.
 
     #### How to Interpret the Visualization
-    The plot shows the Chi-square (χ²) distribution for your test setup. This curve represents the range of outcomes you'd expect to see due to normal random chance if your tracking were working perfectly.
-    - The **red dotted line** shows the **Critical Value**. If your result is to the right of this line, it's statistically significant.
+    The plot shows the Chi-square (χ²) distribution for your test setup. This curve represents the range of outcomes you'd expect from random chance if your tracking were perfect.
+    - The **shaded red area** is the **Rejection Region**. It starts at the **Critical Value** (the red dotted line).
     - The **black dashed line** is your test's actual result (the "Observed Statistic").
-    - The **shaded red area** is the "Rejection Region." If your observed statistic falls in this area, you have a clear SRM.
-    
-    If your observed statistic is far to the right of the critical value, it means your result was highly unlikely to have occurred by chance, signaling a probable SRM.
+
+    **The key rule is:** If your **Observed Statistic** falls into the **Rejection Region**, you have an SRM. This means your result is so extreme that it's highly unlikely to be due to random chance, indicating a probable issue with your test setup.
 
     #### What should I do if I find an SRM?
     **Do not trust the results of the experiment.** You should immediately pause the test, investigate the root cause of the allocation issue (e.g., faulty randomization logic, redirects, tracking pixel errors), fix it, and restart the experiment from scratch.
