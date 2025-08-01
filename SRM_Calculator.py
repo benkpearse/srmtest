@@ -11,28 +11,44 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# --- Plotting Function ---
+# --- REWRITTEN PLOTTING FUNCTION ---
 def plot_srm_distribution(chi2_stat, p_value, df, significance_level):
     """
-    Generates a plot of the Chi-square distribution to visualize the SRM test.
+    Generates an interpretable plot of the Chi-square distribution.
     """
     fig, ax = plt.subplots(figsize=(9, 4.5))
     plt.style.use('seaborn-v0_8-whitegrid')
 
-    # Create a range of x-values for the plot
-    x_max = max(chi2_stat * 1.5, chi2.ppf(0.999, df))
+    # Calculate the critical value for the chosen significance level
+    critical_value = chi2.ppf(1 - significance_level, df)
+    
+    # Define a sensible x-axis range focused on the distribution's body
+    x_max = max(critical_value * 1.5, chi2.ppf(0.999, df))
     x = np.linspace(0, x_max, 500)
     
     # Plot the Chi-square probability density function
     ax.plot(x, chi2.pdf(x, df), 'b-', label=f'Chi-square Distribution (df={df})')
 
-    # Shade the area for the p-value
-    shade_x = np.linspace(chi2_stat, x_max, 100)
-    ax.fill_between(shade_x, chi2.pdf(shade_x, df), color='salmon', alpha=0.6, label=f'p-value = {p_value:.4f}')
+    # Shade the rejection region (the area beyond the critical value)
+    shade_x = np.linspace(critical_value, x_max, 100)
+    ax.fill_between(shade_x, chi2.pdf(shade_x, df), color='salmon', alpha=0.6, 
+                    label=f'Rejection Region (α = {significance_level})')
+    
+    # Mark the critical value
+    ax.axvline(x=critical_value, color='darkred', linestyle=':', 
+               label=f'Critical Value = {critical_value:.2f}')
     
     # Mark the observed Chi-square statistic
-    ax.axvline(x=chi2_stat, color='red', linestyle='--', label=f'Observed Statistic = {chi2_stat:.2f}')
+    ax.axvline(x=chi2_stat, color='black', linestyle='--', 
+               label=f'Observed Statistic = {chi2_stat:.2f}')
     
+    # Add an annotation if the observed statistic is far off the chart
+    if chi2_stat > x_max:
+        ax.annotate('Observed statistic is far\nto the right (strong SRM)', 
+                    xy=(x_max, 0), xytext=(x_max * 0.7, ax.get_ylim()[1] * 0.5),
+                    arrowprops=dict(facecolor='black', shrink=0.05),
+                    ha='center')
+
     ax.set_title("Chi-Square Test for Sample Ratio Mismatch")
     ax.set_xlabel("Chi-Square Statistic (χ²)")
     ax.set_ylabel("Probability Density")
@@ -174,12 +190,12 @@ with st.expander("ℹ️ How to interpret these results"):
 
     #### How to Interpret the Visualization
     The plot shows the Chi-square (χ²) distribution for your test setup. This curve represents the range of outcomes you'd expect to see due to normal random chance if your tracking were working perfectly.
-    - The **red dashed line** is your test's actual result (the "Observed Statistic").
-    - The **shaded red area** to its right is the p-value.
+    - The **red dotted line** shows the **Critical Value**. If your result is to the right of this line, it's statistically significant.
+    - The **black dashed line** is your test's actual result (the "Observed Statistic").
+    - The **shaded red area** is the "Rejection Region." If your observed statistic falls in this area, you have a clear SRM.
     
-    If your observed statistic is far to the right and the shaded area is very small, it means your result was highly unlikely to have occurred by chance, signaling a probable SRM.
+    If your observed statistic is far to the right of the critical value, it means your result was highly unlikely to have occurred by chance, signaling a probable SRM.
 
     #### What should I do if I find an SRM?
     **Do not trust the results of the experiment.** You should immediately pause the test, investigate the root cause of the allocation issue (e.g., faulty randomization logic, redirects, tracking pixel errors), fix it, and restart the experiment from scratch.
     """)
-
