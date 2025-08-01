@@ -2,7 +2,7 @@ import streamlit as st
 import numpy as np
 import pandas as pd
 from scipy.stats import chi2, chisquare
-import matplotlib.pyplot as plt
+import altair as alt
 
 # 1. Set Page Configuration
 st.set_page_config(
@@ -11,50 +11,54 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# --- REWRITTEN PLOTTING FUNCTION ---
-def plot_srm_distribution(chi2_stat, p_value, df, significance_level):
+# --- NEW ALTAIR PLOTTING FUNCTION ---
+def plot_srm_altair_chart(chi2_stat, p_value, df, significance_level):
     """
-    Generates an interpretable plot of the Chi-square distribution.
+    Generates an interpretable plot of the Chi-square distribution using Altair.
     """
-    fig, ax = plt.subplots(figsize=(9, 4.5))
-    plt.style.use('seaborn-v0_8-whitegrid')
-
-    # Calculate the critical value for the chosen significance level
     critical_value = chi2.ppf(1 - significance_level, df)
-    
-    # Define a sensible x-axis range focused on the distribution's body
-    x_max = max(critical_value * 1.5, chi2.ppf(0.999, df))
+    x_max = max(critical_value * 2, chi2.ppf(0.999, df))
     x = np.linspace(0, x_max, 500)
     
-    # Plot the Chi-square probability density function
-    ax.plot(x, chi2.pdf(x, df), 'b-', label=f'Chi-square Distribution (df={df})')
+    # Create a DataFrame for plotting
+    source = pd.DataFrame({
+        'x': x,
+        'pdf': chi2.pdf(x, df)
+    })
 
-    # Shade the rejection region (the area beyond the critical value)
-    shade_x = np.linspace(critical_value, x_max, 100)
-    ax.fill_between(shade_x, chi2.pdf(shade_x, df), color='salmon', alpha=0.6, 
-                    label=f'Rejection Region (α = {significance_level})')
+    # Base chart for the distribution
+    base = alt.Chart(source).encode(
+        x=alt.X('x:Q', title='Chi-Square Statistic (χ²)')
+    )
     
-    # Mark the critical value
-    ax.axvline(x=critical_value, color='darkred', linestyle=':', 
-               label=f'Critical Value = {critical_value:.2f}')
-    
-    # Mark the observed Chi-square statistic
-    ax.axvline(x=chi2_stat, color='black', linestyle='--', 
-               label=f'Observed Statistic = {chi2_stat:.2f}')
-    
-    # Add an annotation if the observed statistic is far off the chart
-    if chi2_stat > x_max:
-        ax.annotate('Observed statistic is far\nto the right (strong SRM)', 
-                    xy=(x_max, 0), xytext=(x_max * 0.7, ax.get_ylim()[1] * 0.5),
-                    arrowprops=dict(facecolor='black', shrink=0.05),
-                    ha='center')
+    line = base.mark_line().encode(
+        y=alt.Y('pdf:Q', title='Probability Density')
+    )
 
-    ax.set_title("Chi-Square Test for Sample Ratio Mismatch")
-    ax.set_xlabel("Chi-Square Statistic (χ²)")
-    ax.set_ylabel("Probability Density")
-    ax.legend()
+    # Shaded rejection region
+    rejection_region = base.mark_area(opacity=0.5, color='salmon').encode(
+        y='pdf:Q'
+    ).transform_filter(
+        alt.datum.x >= critical_value
+    )
+
+    # Rule for the critical value
+    critical_rule = alt.Chart(pd.DataFrame({'x': [critical_value]})).mark_rule(color='darkred', strokeDash=[3,3]).encode(
+        x='x:Q'
+    )
     
-    return fig
+    # Rule for the observed statistic
+    observed_rule = alt.Chart(pd.DataFrame({'x': [chi2_stat]})).mark_rule(color='black', size=2).encode(
+        x='x:Q'
+    )
+    
+    # Combine the layers
+    chart = (line + rejection_region + critical_rule + observed_rule).properties(
+        title="Chi-Square Test for Sample Ratio Mismatch"
+    ).interactive()
+
+    return chart
+
 
 # 2. Page Title and Introduction
 st.title("⚖️ Sample Ratio Mismatch (SRM) Calculator")
@@ -85,11 +89,16 @@ with st.sidebar:
 
     observed_counts = []
     expected_split = []
+    variant_names = []
 
     if split_mode == "Assume Equal Split":
         st.caption("Enter the observed user counts for each variant.")
         for i in range(num_variants):
-            variant_name = f"Variant {chr(65 + i)}"
+            if i == 0:
+                variant_name = "Control"
+            else:
+                variant_name = f"Variant {i}"
+            variant_names.append(variant_name)
             observed = st.number_input(
                 f"Users in {variant_name}",
                 min_value=0, value=10000, step=1, key=f"obs_{i}"
@@ -101,7 +110,11 @@ with st.sidebar:
         st.caption("Enter observed counts and the expected split percentage for each variant.")
         col1, col2 = st.columns(2)
         for i in range(num_variants):
-            variant_name = f"Variant {chr(65 + i)}"
+            if i == 0:
+                variant_name = "Control"
+            else:
+                variant_name = f"Variant {i}"
+            variant_names.append(variant_name)
             with col1:
                 observed = st.number_input(
                     f"Users in {variant_name}",
@@ -145,7 +158,7 @@ if run_button:
             expected_counts = [s * total_users for s in expected_split_decimal]
 
             summary_data = {
-                "Variant": [f"Variant {chr(65 + i)}" for i in range(num_variants)],
+                "Variant": variant_names, # Use the generated names
                 "Observed Users": observed_counts,
                 "Expected Split": [f"{s:.1f}%" for s in expected_split],
                 "Expected Users": [f"{c:,.1f}" for c in expected_counts]
@@ -175,8 +188,8 @@ if run_button:
                 )
             
             st.subheader("Visualization")
-            fig = plot_srm_distribution(chi2_stat, p_value, df, significance_level)
-            st.pyplot(fig)
+            chart = plot_srm_altair_chart(chi2_stat, p_value, df, significance_level)
+            st.altair_chart(chart, use_container_width=True)
 
 else:
     st.info("Adjust the parameters in the sidebar and click 'Check for SRM'.")
