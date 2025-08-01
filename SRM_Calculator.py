@@ -3,7 +3,6 @@ import numpy as np
 import pandas as pd
 from scipy.stats import chi2, chisquare
 # Matplotlib is now lazy-loaded
-# Altair has been removed
 
 # 1. Set Page Configuration
 st.set_page_config(
@@ -29,12 +28,11 @@ def plot_srm_distribution(chi2_stat, p_value, df, significance_level):
     x = np.linspace(0, x_max, 500)
     
     # Plot the Chi-square probability density function
-    ax.plot(x, chi2.pdf(x, df), 'b-', label=f'Chi-square Distribution (df={df})')
+    ax.plot(x, chi2.pdf(x, df), 'b-', label=f'Chi-square Distribution (df={df})', zorder=2)
 
-    # Shade the rejection region
-    shade_x = np.linspace(critical_value, x_max, 100)
-    ax.fill_between(shade_x, chi2.pdf(shade_x, df), color='salmon', alpha=0.6, 
-                    label=f'Rejection Region (α = {significance_level})')
+    # UPDATED: Shade the entire background area for the rejection region
+    ax.axvspan(critical_value, x_max, color='salmon', alpha=0.3, 
+               label=f'Rejection Region (α = {significance_level})', zorder=1)
     
     # Mark the critical value
     ax.axvline(x=critical_value, color='darkred', linestyle=':', 
