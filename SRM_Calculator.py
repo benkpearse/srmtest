@@ -11,49 +11,55 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# --- NEW ALTAIR PLOTTING FUNCTION ---
+# --- REWRITTEN ALTAIR PLOTTING FUNCTION ---
 def plot_srm_altair_chart(chi2_stat, p_value, df, significance_level):
     """
     Generates an interpretable plot of the Chi-square distribution using Altair.
+    This version uses alt.layer() for robust rendering.
     """
     critical_value = chi2.ppf(1 - significance_level, df)
     x_max = max(critical_value * 2, chi2.ppf(0.999, df))
     x = np.linspace(0, x_max, 500)
     
-    # Create a DataFrame for plotting
+    # Create a DataFrame for plotting the distribution curve
     source = pd.DataFrame({
         'x': x,
         'pdf': chi2.pdf(x, df)
     })
 
-    # Base chart for the distribution
-    base = alt.Chart(source).encode(
-        x=alt.X('x:Q', title='Chi-Square Statistic (χ²)')
-    )
-    
-    line = base.mark_line().encode(
+    # Base chart for the distribution line
+    line = alt.Chart(source).mark_line().encode(
+        x=alt.X('x:Q', title='Chi-Square Statistic (χ²)'),
         y=alt.Y('pdf:Q', title='Probability Density')
     )
 
     # Shaded rejection region
-    rejection_region = base.mark_area(opacity=0.5, color='salmon').encode(
+    rejection_region = alt.Chart(source).mark_area(opacity=0.5, color='salmon').encode(
+        x='x:Q',
         y='pdf:Q'
     ).transform_filter(
         alt.datum.x >= critical_value
     )
 
-    # Rule for the critical value
-    critical_rule = alt.Chart(pd.DataFrame({'x': [critical_value]})).mark_rule(color='darkred', strokeDash=[3,3]).encode(
-        x='x:Q'
+    # Create a DataFrame for the vertical lines to add tooltips
+    rules_df = pd.DataFrame({
+        'x': [critical_value, chi2_stat],
+        'color': ['darkred', 'black'],
+        'strokeDash': [[3, 3], [0, 0]], # Dashed for critical, solid for observed
+        'label': [f'Critical Value (α={significance_level})', 'Observed Statistic']
+    })
+
+    rules = alt.Chart(rules_df).mark_rule(size=2).encode(
+        x='x:Q',
+        color=alt.Color('color:N', scale=None),
+        strokeDash=alt.StrokeDash('strokeDash:N', scale=None),
+        tooltip=['label', alt.Tooltip('x:Q', format='.2f')]
     )
     
-    # Rule for the observed statistic
-    observed_rule = alt.Chart(pd.DataFrame({'x': [chi2_stat]})).mark_rule(color='black', size=2).encode(
-        x='x:Q'
-    )
-    
-    # Combine the layers
-    chart = (line + rejection_region + critical_rule + observed_rule).properties(
+    # Combine all layers into a single chart
+    chart = alt.layer(
+        line, rejection_region, rules
+    ).properties(
         title="Chi-Square Test for Sample Ratio Mismatch"
     ).interactive()
 
@@ -204,7 +210,7 @@ with st.expander("ℹ️ How to interpret these results"):
     #### How to Interpret the Visualization
     The plot shows the Chi-square (χ²) distribution for your test setup. This curve represents the range of outcomes you'd expect to see due to normal random chance if your tracking were working perfectly.
     - The **red dotted line** shows the **Critical Value**. If your result is to the right of this line, it's statistically significant.
-    - The **black dashed line** is your test's actual result (the "Observed Statistic").
+    - The **black solid line** is your test's actual result (the "Observed Statistic").
     - The **shaded red area** is the "Rejection Region." If your observed statistic falls in this area, you have a clear SRM.
     
     If your observed statistic is far to the right of the critical value, it means your result was highly unlikely to have occurred by chance, signaling a probable SRM.
