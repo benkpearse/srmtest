@@ -18,7 +18,8 @@ def plot_srm_altair_chart(chi2_stat, p_value, df, significance_level):
     This version uses alt.layer() for robust rendering.
     """
     critical_value = chi2.ppf(1 - significance_level, df)
-    x_max = max(critical_value * 2, chi2.ppf(0.999, df))
+    # Adjust x_max to ensure the observed statistic is visible if it's not extreme
+    x_max = max(critical_value * 1.5, chi2_stat * 1.1, chi2.ppf(0.999, df))
     x = np.linspace(0, x_max, 500)
     
     # Create a DataFrame for plotting the distribution curve
@@ -44,15 +45,21 @@ def plot_srm_altair_chart(chi2_stat, p_value, df, significance_level):
     # Create a DataFrame for the vertical lines to add tooltips
     rules_df = pd.DataFrame({
         'x': [critical_value, chi2_stat],
-        'color': ['darkred', 'black'],
-        'strokeDash': [[3, 3], [0, 0]], # Dashed for critical, solid for observed
         'label': [f'Critical Value (α={significance_level})', 'Observed Statistic']
     })
 
+    # Create rules with tooltips
     rules = alt.Chart(rules_df).mark_rule(size=2).encode(
         x='x:Q',
-        color=alt.Color('color:N', scale=None),
-        strokeDash=alt.StrokeDash('strokeDash:N', scale=None),
+        color=alt.Color('label:N', 
+                        scale=alt.Scale(domain=[f'Critical Value (α={significance_level})', 'Observed Statistic'], 
+                                        range=['darkred', 'black']),
+                        legend=alt.Legend(title="Markers")),
+        strokeDash=alt.condition(
+            alt.datum.label == 'Observed Statistic',
+            alt.value([0]),  # Solid line
+            alt.value([3, 3]) # Dashed line
+        ),
         tooltip=['label', alt.Tooltip('x:Q', format='.2f')]
     )
     
@@ -209,7 +216,7 @@ with st.expander("ℹ️ How to interpret these results"):
 
     #### How to Interpret the Visualization
     The plot shows the Chi-square (χ²) distribution for your test setup. This curve represents the range of outcomes you'd expect to see due to normal random chance if your tracking were working perfectly.
-    - The **red dotted line** shows the **Critical Value**. If your result is to the right of this line, it's statistically significant.
+    - The **red dashed line** shows the **Critical Value**. If your result is to the right of this line, it's statistically significant.
     - The **black solid line** is your test's actual result (the "Observed Statistic").
     - The **shaded red area** is the "Rejection Region." If your observed statistic falls in this area, you have a clear SRM.
     
