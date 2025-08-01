@@ -2,7 +2,8 @@ import streamlit as st
 import numpy as np
 import pandas as pd
 from scipy.stats import chi2, chisquare
-import altair as alt
+# Matplotlib is now lazy-loaded
+# Altair has been removed
 
 # 1. Set Page Configuration
 st.set_page_config(
@@ -11,67 +12,52 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# --- REWRITTEN ALTAIR PLOTTING FUNCTION ---
-def plot_srm_altair_chart(chi2_stat, p_value, df, significance_level):
+# --- MATPLOTLIB PLOTTING FUNCTION ---
+def plot_srm_distribution(chi2_stat, p_value, df, significance_level):
     """
-    Generates an interpretable plot of the Chi-square distribution using Altair.
-    This version uses alt.layer() for robust rendering.
+    Generates an interpretable plot of the Chi-square distribution using Matplotlib.
     """
+    import matplotlib.pyplot as plt
+    fig, ax = plt.subplots(figsize=(9, 4.5))
+    plt.style.use('seaborn-v0_8-whitegrid')
+
+    # Calculate the critical value for the chosen significance level
     critical_value = chi2.ppf(1 - significance_level, df)
-    # Adjust x_max to ensure the observed statistic is visible if it's not extreme
-    x_max = max(critical_value * 1.5, chi2_stat * 1.1, chi2.ppf(0.999, df))
+    
+    # Define a sensible x-axis range focused on the distribution's body
+    x_max = max(critical_value * 2, chi2.ppf(0.999, df))
     x = np.linspace(0, x_max, 500)
     
-    # Create a DataFrame for plotting the distribution curve
-    source = pd.DataFrame({
-        'x': x,
-        'pdf': chi2.pdf(x, df)
-    })
+    # Plot the Chi-square probability density function
+    ax.plot(x, chi2.pdf(x, df), 'b-', label=f'Chi-square Distribution (df={df})')
 
-    # Base chart for the distribution line
-    line = alt.Chart(source).mark_line().encode(
-        x=alt.X('x:Q', title='Chi-Square Statistic (χ²)'),
-        y=alt.Y('pdf:Q', title='Probability Density')
-    )
-
-    # Shaded rejection region
-    rejection_region = alt.Chart(source).mark_area(opacity=0.5, color='salmon').encode(
-        x='x:Q',
-        y='pdf:Q'
-    ).transform_filter(
-        alt.datum.x >= critical_value
-    )
-
-    # Create a DataFrame for the vertical lines to add tooltips
-    rules_df = pd.DataFrame({
-        'x': [critical_value, chi2_stat],
-        'label': [f'Critical Value (α={significance_level})', 'Observed Statistic']
-    })
-
-    # Create rules with tooltips
-    rules = alt.Chart(rules_df).mark_rule(size=2).encode(
-        x='x:Q',
-        color=alt.Color('label:N', 
-                        scale=alt.Scale(domain=[f'Critical Value (α={significance_level})', 'Observed Statistic'], 
-                                        range=['darkred', 'black']),
-                        legend=alt.Legend(title="Markers")),
-        strokeDash=alt.condition(
-            alt.datum.label == 'Observed Statistic',
-            alt.value([0]),  # Solid line
-            alt.value([3, 3]) # Dashed line
-        ),
-        tooltip=['label', alt.Tooltip('x:Q', format='.2f')]
-    )
+    # Shade the rejection region
+    shade_x = np.linspace(critical_value, x_max, 100)
+    ax.fill_between(shade_x, chi2.pdf(shade_x, df), color='salmon', alpha=0.6, 
+                    label=f'Rejection Region (α = {significance_level})')
     
-    # Combine all layers into a single chart
-    chart = alt.layer(
-        line, rejection_region, rules
-    ).properties(
-        title="Chi-Square Test for Sample Ratio Mismatch"
-    ).interactive()
+    # Mark the critical value
+    ax.axvline(x=critical_value, color='darkred', linestyle=':', 
+               label=f'Critical Value = {critical_value:.2f}')
+    
+    # Check if the observed statistic is within the plot's visible range
+    if chi2_stat < x_max:
+        ax.axvline(x=chi2_stat, color='black', linestyle='--', 
+                   label=f'Observed Statistic = {chi2_stat:.2f}')
+    else:
+        ax.text(0.95, 0.9, 'Observed statistic is\nfar off-chart to the right',
+                transform=ax.transAxes, fontsize=10,
+                verticalalignment='top', horizontalalignment='right',
+                bbox=dict(boxstyle='round', facecolor='white', alpha=0.8))
+        # Add a dummy plot so the label still appears in the legend
+        ax.plot([], [], 'k--', label=f'Observed Statistic = {chi2_stat:.2f}')
 
-    return chart
-
+    ax.set_title("Chi-Square Test for Sample Ratio Mismatch")
+    ax.set_xlabel("Chi-Square Statistic (χ²)")
+    ax.set_ylabel("Probability Density")
+    ax.legend()
+    
+    return fig
 
 # 2. Page Title and Introduction
 st.title("⚖️ Sample Ratio Mismatch (SRM) Calculator")
@@ -201,8 +187,8 @@ if run_button:
                 )
             
             st.subheader("Visualization")
-            chart = plot_srm_altair_chart(chi2_stat, p_value, df, significance_level)
-            st.altair_chart(chart, use_container_width=True)
+            fig = plot_srm_distribution(chi2_stat, p_value, df, significance_level)
+            st.pyplot(fig)
 
 else:
     st.info("Adjust the parameters in the sidebar and click 'Check for SRM'.")
@@ -216,8 +202,8 @@ with st.expander("ℹ️ How to interpret these results"):
 
     #### How to Interpret the Visualization
     The plot shows the Chi-square (χ²) distribution for your test setup. This curve represents the range of outcomes you'd expect to see due to normal random chance if your tracking were working perfectly.
-    - The **red dashed line** shows the **Critical Value**. If your result is to the right of this line, it's statistically significant.
-    - The **black solid line** is your test's actual result (the "Observed Statistic").
+    - The **red dotted line** shows the **Critical Value**. If your result is to the right of this line, it's statistically significant.
+    - The **black dashed line** is your test's actual result (the "Observed Statistic").
     - The **shaded red area** is the "Rejection Region." If your observed statistic falls in this area, you have a clear SRM.
     
     If your observed statistic is far to the right of the critical value, it means your result was highly unlikely to have occurred by chance, signaling a probable SRM.
